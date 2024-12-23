@@ -86,6 +86,15 @@ LayupDrawer.prototype = {
     this.drawGrainBackground({
       size: { width: grainWidth, height: grainHeight },
     });
+
+    this.drawGrainPatternRow({
+      blockCount: 5,
+      position: {
+        x: this.initialPos.x - 70,
+        y: this.initialPos.y,
+      },
+      blockSize: { width: 60, height: 30 },
+    });
   },
 
   /**
@@ -99,18 +108,21 @@ LayupDrawer.prototype = {
   },
 
   /**
-   * @typedef {Object} DrawGrainRegionArgs Grain region drawing arguments
-   * @property {Size} size Grain region size
+   * Create clip region
    *
-   * @param {DrawGrainRegionArgs} args Drawing arguments
+   * @typedef {Object} CreateClipRegionArgs Clip region drawing arguments
+   * @property {Size} size Clip region size in mm
+   * @property {Position} position Clip region position
+   *
+   * @param {CreateClipRegionArgs} args Drawing arguments
    */
-  drawGrainRegion: function ({ size }) {
+  createClipRegion: function ({ position, size }) {
     this.ctx.beginPath();
 
     const box = new Path2D();
     box.rect(
-      this.initialPos.x,
-      this.initialPos.y,
+      position.x,
+      position.y,
       this.toPixel(size.width),
       this.toPixel(size.height)
     );
@@ -118,6 +130,16 @@ LayupDrawer.prototype = {
     this.ctx.clip(box, 'evenodd');
 
     this.ctx.closePath();
+  },
+
+  /**
+   * @typedef {Object} DrawGrainRegionArgs Grain region drawing arguments
+   * @property {Size} size Grain region size
+   *
+   * @param {DrawGrainRegionArgs} args Drawing arguments
+   */
+  drawGrainRegion: function ({ size }) {
+    this.createClipRegion({ position: this.initialPos, size });
   },
 
   /**
@@ -129,9 +151,8 @@ LayupDrawer.prototype = {
    * @param {DrawGrainBackgroundArgs} args Drawing arguments
    */
   drawGrainBackground: function ({ size }) {
-    this.ctx.beginPath();
-
     // actual image size is 500x500
+
     this.ctx.drawImage(
       this.paralelGrainImg,
       0,
@@ -143,8 +164,6 @@ LayupDrawer.prototype = {
       this.toPixel(size.width),
       this.toPixel(size.height)
     );
-
-    this.ctx.closePath();
   },
 
   /**
@@ -152,28 +171,71 @@ LayupDrawer.prototype = {
    *
    * @typedef {Object} DrawGrainPatternBLockArgs Grain pattern drawing arguments
    * @property {Size} size Grain pattern size in mm
-   * @property {Position} position Grain pattern position in mm
+   * @property {Position} position Grain pattern position in pixel
    *
    * @param {DrawGrainPatternBLockArgs} args Drawing arguments
    *
    */
-  drawGrainPatternBlock: function ({ position, size }) {},
+  drawGrainPatternBlock: function ({ position, size }) {
+    // actual size is 1500x500
+
+    const topPortion = 0.4;
+    const bottomPortion = 0.6;
+
+    this.ctx.drawImage(
+      this.perpendicularGrainImg,
+      0,
+      0,
+      1500,
+      300,
+      position.x,
+      position.y,
+      this.toPixel(size.width),
+      this.toPixel(size.height) * topPortion
+    );
+
+    this.ctx.drawImage(
+      this.perpendicularGrainImg,
+      0,
+      0,
+      1500,
+      500,
+      position.x,
+      position.y + this.toPixel(size.height) * topPortion,
+      this.toPixel(size.width),
+      this.toPixel(size.height) * bottomPortion
+    );
+  },
 
   /**
+   * Draw multiple grain pattern blocks as a row
    *
    * @typedef {Object} DrawGrainPatternRowArgs Grain pattern row drawing arguments
    * @property {Position} position Grain pattern row position in mm
    * @property {Number} blockCount Number of blocks in the row
+   * @property {Size} blockSize Size of each block in mm
    *
    * @param {DrawGrainPatternRowArgs} args Drawing arguments
    */
-  drawGrainPatternRow: function ({ position, blockCount }) {},
+  drawGrainPatternRow: function ({ position, blockCount, blockSize }) {
+    for (let i = 0; i < blockCount; i++) {
+      this.drawGrainPatternBlock({
+        size: blockSize,
+        position: {
+          x: position.x + i * this.toPixel(blockSize.width),
+          y: position.y,
+        },
+      });
+    }
+  },
 
   /**
    * Draw layup ruler
    *
    * @typedef {Object} DrawRulerArgs Ruler drawing arguments
    * @property {Size} size Ruler size in mm
+   *
+   * @param {DrawRulerArgs} args Drawing arguments
    */
-  drawRuler: function () {},
+  drawRuler: function ({ size }) {},
 };
