@@ -71,6 +71,7 @@ LayupDrawer.prototype = {
     this.perpendicularGrainImg.src = 'images/perpendicular-grain-90.jpg';
 
     this.ctx.font = '14px Arial';
+    this.ctx.fillStyle = 'gray';
     this.ctx.strokeStyle = 'gray';
   },
 
@@ -94,19 +95,18 @@ LayupDrawer.prototype = {
 
     this.drawLegends({ size: { width: grainWidth, height: grainHeight } });
 
+    this.ctx.save();
+
     this.drawGrainRegion({ size: { width: grainWidth, height: grainHeight } });
 
     this.drawGrainBackground({
       size: { width: grainWidth, height: grainHeight },
     });
 
-    this.drawGrainPatternRow({
-      blockCount: 5,
-      position: {
-        x: this.initialPos.x - 70,
-        y: this.initialPos.y,
-      },
-      blockSize: { width: 60, height: 25 },
+    this.drawLayupRows({
+      layupList,
+      position: this.initialPos,
+      size: { width: grainWidth, height: grainHeight },
     });
   },
 
@@ -240,6 +240,98 @@ LayupDrawer.prototype = {
         },
       });
     }
+
+    this.ctx.beginPath();
+
+    this.ctx.strokeStyle = 'lime';
+    this.ctx.moveTo(position.x, position.y);
+    this.ctx.lineTo(
+      position.x + this.toPixel(blockSize.width) * blockCount,
+      position.y
+    );
+
+    this.ctx.stroke();
+
+    this.ctx.moveTo(position.x, position.y + this.toPixel(blockSize.height));
+
+    this.ctx.lineTo(
+      position.x + this.toPixel(blockSize.width) * blockCount,
+      position.y + this.toPixel(blockSize.height)
+    );
+
+    this.ctx.stroke();
+
+    this.ctx.closePath();
+  },
+
+  /**
+   * @typedef {Object} DrawLayupRowsArgs Layup rows drawing arguments
+   * @property {LayupList} layupList Layup list
+   * @property {Size} size Layup size in mm
+   * @property {Position} position Layup position in pixel
+   *
+   * @param {DrawLayupRowsArgs} args Drawing arguments
+   */
+  drawLayupRows: function ({ layupList, position, size }) {
+    const layupKeys = Object.keys(layupList);
+
+    layupKeys.forEach((_, index) => {
+      const yDelta = index * (this.toPixel(size.height) / layupKeys.length);
+
+      if (index % 2 === 0) return;
+
+      this.drawGrainPatternRow({
+        blockCount: 5,
+        blockSize: { width: 60, height: 30 },
+        position: {
+          x: position.x - 70,
+          y: position.y + yDelta,
+        },
+      });
+    });
+
+    this.ctx.restore();
+
+    layupKeys.forEach((key, index) => {
+      const layup = layupList[key];
+      const yDelta =
+        index * (this.toPixel(size.height) / layupKeys.length) + 30;
+
+      this.drawText({
+        text: `${layup.label}: ${layup.thickness}mm ${layup.grade}`,
+        radian: 0,
+        position: {
+          x: position.x + this.toPixel(size.width) + 75,
+          y: position.y + yDelta,
+        },
+      });
+    });
+
+    this.ctx.beginPath();
+
+    this.ctx.moveTo(this.initialPos.x, this.initialPos.y);
+
+    this.ctx.lineTo(
+      this.initialPos.x + this.toPixel(size.width),
+      this.initialPos.y
+    );
+
+    this.ctx.strokeStyle = 'lime';
+    this.ctx.stroke();
+
+    this.ctx.moveTo(
+      this.initialPos.x,
+      this.initialPos.y + this.toPixel(size.height)
+    );
+
+    this.ctx.lineTo(
+      this.initialPos.x + this.toPixel(size.width),
+      this.initialPos.y + this.toPixel(size.height)
+    );
+
+    this.ctx.stroke();
+
+    this.ctx.closePath();
   },
 
   /**
