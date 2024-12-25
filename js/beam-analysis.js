@@ -58,23 +58,34 @@ class Beam {
  */
 
 /**
+ * @typedef {Object} FnEquationResult Equation result
+ * @property {Number} x X value which is the distance from the left support
+ * @property {Number} y Y value which is the value of the equation
+ *
+ * @callback FnEquation
+ * @param {Number} x X value which is the distance from the left support
+ * @returns {FnEquationResult} Equation result returning chart coordinates
+ */
+
+/**
  * @callback FnGetShearForceEquation Get shear force equation function
  * @param {Beam} beam Beam object
  * @param {Number} load Load
- * @returns {Function} Shear force equation
+ * @returns {FnEquation} Shear force equation
  */
 
 /**
  * @callback FnGetBendingMomentEquation Get bending moment equation function
  * @param {Beam} beam Beam object
  * @param {Number} load Load
+ * @returns {FnEquation} Bending moment equation
  */
 
 /**
  * @callback FnGetDeflectionEquation Get deflection equation function
  * @param {Beam} beam Beam object
  * @param {Number} load Load
- * @returns {Function} Deflection equation
+ * @returns {FnEquation} Deflection equation
  */
 
 /**
@@ -93,7 +104,7 @@ class BeamAnalysis {
 
     /**
      * @type {BeamAnalysisOptions} Beam analysis options
-     * @public
+     * @private
      */
     this.options = {
       condition: 'simply-supported',
@@ -120,6 +131,7 @@ class BeamAnalysis {
 
     if (analyzer) {
       return {
+        condition,
         beam: beam,
         load: load,
         equation: analyzer.getDeflectionEquation(beam, load),
@@ -140,6 +152,7 @@ class BeamAnalysis {
 
     if (analyzer) {
       return {
+        condition,
         beam: beam,
         load: load,
         equation: analyzer.getBendingMomentEquation(beam, load),
@@ -160,6 +173,7 @@ class BeamAnalysis {
 
     if (analyzer) {
       return {
+        condition,
         beam: beam,
         load: load,
         equation: analyzer.getShearForceEquation(beam, load),
@@ -199,10 +213,31 @@ BeamAnalysis.analyzer.simplySupported = class {
    * @type {FnGetDeflectionEquation}
    */
   getDeflectionEquation(beam, load) {
+    // formula: -1 * ((w * x) / (24 * EI)) * (L^3 - 2*L * x^2 + x^3) * j2 * 1000
+
+    const { EI, j2 } = beam.material.properties;
+
+    const eiInKilos = EI / Math.pow(1000, 3);
+
     return function (x) {
+      if (x > beam.primarySpan || x < 0) {
+        throw new Error('Invalid x value');
+      }
+
+      const xSquared = Math.pow(x, 2);
+      const xCubed = Math.pow(x, 3);
+      const lengthCubed = Math.pow(beam.primarySpan, 3);
+
+      const deflection =
+        -1 *
+        ((load * x) / (24 * eiInKilos)) *
+        (lengthCubed - 2 * beam.primarySpan * xSquared + xCubed) *
+        j2 *
+        1000;
+
       return {
         x: x,
-        y: null,
+        y: deflection,
       };
     };
   }
@@ -211,10 +246,18 @@ BeamAnalysis.analyzer.simplySupported = class {
    * @type {FnGetBendingMomentEquation}
    */
   getBendingMomentEquation(beam, load) {
+    // formula: ((w * x / 2) * (L - x)) * -1
+
     return function (x) {
+      if (x > beam.primarySpan || x < 0) {
+        throw new Error('Invalid x value');
+      }
+
+      const bendingMoment = ((load * x) / 2) * (beam.primarySpan - x) * -1;
+
       return {
         x: x,
-        y: null,
+        y: bendingMoment,
       };
     };
   }
@@ -223,10 +266,20 @@ BeamAnalysis.analyzer.simplySupported = class {
    * @type {FnGetShearForceEquation}
    */
   getShearForceEquation(beam, load) {
+    // formula: w * ((L / 2) - x)
+    // where w = load, L = span length, x = distance from left support
+    // stop when x === L, which basically means reach all the way to the right end
+
     return function (x) {
+      if (x > beam.primarySpan || x < 0) {
+        throw new Error('Invalid x value');
+      }
+
+      const shearForce = load * (beam.primarySpan / 2 - x);
+
       return {
         x: x,
-        y: null,
+        y: shearForce,
       };
     };
   }
