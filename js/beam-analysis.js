@@ -328,7 +328,7 @@ BeamAnalysis.analyzer.twoSpanUnequal = class {
     // part 4: ((w * x / 24) * (x^3 - L1^3))
     // formula: (p1 + p2 - p3 - p4) * 1 / (EI / 1000^3) * 1000 * j2
 
-    const hundredCubed = Math.pow(1000, 3);
+    const EIInKilos = EI / Math.pow(1000, 3);
 
     const primarySpanSquared = Math.pow(beam.primarySpan, 2);
     const primarySpanCubed = Math.pow(beam.primarySpan, 3);
@@ -347,7 +347,7 @@ BeamAnalysis.analyzer.twoSpanUnequal = class {
         return {
           x,
           y:
-            (x / (24 * (EI / hundredCubed))) *
+            (x / (24 * EIInKilos)) *
             (4 * r1 * xSquared -
               load * xCubed +
               load * primarySpanCubed -
@@ -359,14 +359,14 @@ BeamAnalysis.analyzer.twoSpanUnequal = class {
 
       if (x > beam.primarySpan) {
         const p1 = ((r1 * x) / 6) * (xSquared - primarySpanSquared);
+
         const p2 =
           ((r2 * x) / 6) *
           (xSquared - 3 * beam.primarySpan * x + 3 * primarySpanSquared);
         const p3 = (r2 * primarySpanCubed) / 6;
         const p4 = ((load * x) / 24) * (xCubed - primarySpanCubed);
 
-        const result =
-          (((p1 + p2 - p3 - p4) * 1) / (EI / hundredCubed)) * 1000 * j2;
+        const result = ((p1 + p2 - p3 - p4) * (1000 * j2)) / EIInKilos;
 
         return {
           x,
