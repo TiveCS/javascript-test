@@ -64,6 +64,7 @@ class Beam {
  *
  * @callback FnEquation
  * @param {Number} x X value which is the distance from the left support
+ * @param {Boolean?} isPrimarySpan Is the x value in the primary span side
  * @returns {FnEquationResult} Equation result returning chart coordinates
  */
 
@@ -307,11 +308,81 @@ BeamAnalysis.analyzer.twoSpanUnequal = class {
    * @type {FnGetDeflectionEquation}
    */
   getDeflectionEquation(beam, load) {
+    const totalLength = beam.primarySpan + beam.secondarySpan;
+    const m1 = this.getM1(beam, load);
+    const r1 = this.getR1(beam, load, m1);
+    const r3 = this.getR3(beam, load, m1);
+    const r2 = this.getR2(beam, load, r1, r3);
+
+    const { EI, j2 } = beam.material.properties;
+
+    // formula
+    // x < L1: (x / (24 * (EI / 1000^3))) * (4 * R1 * x^2 - w * x^3 + w * L1^3 - 4 * R1 * L1^2) * 1000 * j2
+
+    // x > L1:
+    // [ ((R1 * x) / 6) * (x^2 - L1^2) + ((R2 * x) / 6) * (x^2 - (3 * L1 * x) + (3 * L1^2)) -  ((R2 * L1^3) / 6 - ((w * x) / 24) * (x^3 - L1^3))] * 1000 * j2
+    // might split into 3 parts
+    // part 1: ((R1 * x / 6) * (x^2 - L1^2))
+    // part 2: ((R2 * x / 6) * (x^2 - 3 * L1 * x + 3 * L1^2))
+    // part 3: ((R2 * L1^3 / 6)
+    // part 4: ((w * x / 24) * (x^3 - L1^3))
+    // formula: (p1 + p2 - p3 - p4) * 1 / (EI / 1000^3) * 1000 * j2
+
+    const hundredCubed = Math.pow(1000, 3);
+
+    const primarySpanSquared = Math.pow(beam.primarySpan, 2);
+    const primarySpanCubed = Math.pow(beam.primarySpan, 3);
+
     return function (x) {
-      return {
-        x: x,
-        y: null,
-      };
+      if (x < 0 || x > totalLength) {
+        throw new Error('Invalid x value. Must be between 0 and total length');
+      }
+
+      if (x === 0) return { x, y: 0 };
+
+      const xSquared = Math.pow(x, 2);
+      const xCubed = Math.pow(x, 3);
+
+      if (x <= beam.primarySpan) {
+        return {
+          x,
+          y:
+            (x / (24 * (EI / hundredCubed))) *
+            (4 * r1 * xSquared -
+              load * xCubed +
+              load * primarySpanCubed -
+              4 * r1 * primarySpanSquared) *
+            1000 *
+            j2,
+        };
+      }
+
+      if (x > beam.primarySpan) {
+        const p1 = ((r1 * x) / 6) * (xSquared - primarySpanSquared);
+        const p2 =
+          ((r2 * x) / 6) *
+          (xSquared - 3 * beam.primarySpan * x + 3 * primarySpanSquared);
+        const p3 = (r2 * primarySpanCubed) / 6;
+        const p4 = ((load * x) / 24) * (xCubed - primarySpanCubed);
+
+        const result =
+          (((p1 + p2 - p3 - p4) * 1) / (EI / hundredCubed)) * 1000 * j2;
+
+        console.log({
+          p1,
+          p2,
+          p3,
+          p4,
+          result,
+        });
+
+        return {
+          x,
+          y: result,
+        };
+      }
+
+      throw new Error(`Invalid condition on x: ${x}`);
     };
   }
 
@@ -319,11 +390,61 @@ BeamAnalysis.analyzer.twoSpanUnequal = class {
    * @type {FnGetBendingMomentEquation}
    */
   getBendingMomentEquation(beam, load) {
-    return function (x) {
-      return {
-        x: x,
-        y: null,
-      };
+    /**
+     * formula:
+     * x = 0 or x = L, bending = 0
+     *
+     * (left span formula)
+     * x < L1, -1 *(R1 * x - 0.5 * w * x^2)
+     *
+     * (right span formula)
+     * x > L1, -((R1 * x + R2 * (x - L1)) - (0.5 * w * x^2)
+     *
+     * (transition point formula)
+     * x = L1, -(R1 * L1 - (0.5 * w * L1^2)
+     *
+     */
+
+    const totalLength = beam.primarySpan + beam.secondarySpan;
+    const m1 = this.getM1(beam, load);
+    const r1 = this.getR1(beam, load, m1);
+    const r3 = this.getR3(beam, load, m1);
+    const r2 = this.getR2(beam, load, r1, r3);
+
+    const primarySpanSquared = Math.pow(beam.primarySpan, 2);
+
+    return function (x, isPrimarySpan = false) {
+      const xSquared = Math.pow(x, 2);
+
+      if (x < 0 || x > totalLength) {
+        throw new Error('Invalid x value. Must be between 0 and total length');
+      }
+
+      if (x === 0 || x === totalLength) return { x, y: 0 };
+
+      // left span formula
+      if (x < beam.primarySpan) {
+        return { x, y: -1 * (r1 * x - load * xSquared * 0.5) };
+      }
+
+      // transition point
+      if (x === beam.primarySpan) {
+        return {
+          x,
+          y: -1 * (r1 * beam.primarySpan - 0.5 * (load * primarySpanSquared)),
+        };
+      }
+
+      // right span formula
+      if (x > beam.primarySpan) {
+        return {
+          x,
+          y:
+            -1 * (r1 * x + r2 * (x - beam.primarySpan) - 0.5 * load * xSquared),
+        };
+      }
+
+      throw new Error(`Invalid condition on x: ${x}`);
     };
   }
 
@@ -331,11 +452,103 @@ BeamAnalysis.analyzer.twoSpanUnequal = class {
    * @type {FnGetShearForceEquation}
    */
   getShearForceEquation(beam, load) {
-    return function (x) {
-      return {
-        x: x,
-        y: null,
-      };
+    const totalLength = beam.primarySpan + beam.secondarySpan;
+
+    const m1 = this.getM1(beam, load);
+    const r1 = this.getR1(beam, load, m1);
+    const r3 = this.getR3(beam, load, m1);
+    const r2 = this.getR2(beam, load, r1, r3);
+
+    return function (x, isPrimarySpan = false) {
+      if (x < 0 || x > totalLength) {
+        throw new Error('Invalid x value. Must be between 0 and total length');
+      }
+
+      if (x === 0) return { x, y: r1 };
+
+      if (x === totalLength) return { x, y: r1 + r2 - load * totalLength };
+
+      // use left span formula
+      if (x > 0 && x < beam.primarySpan) {
+        return { x, y: r1 - load * x };
+      }
+
+      // use right span formula
+      if (x > beam.primarySpan && x < totalLength) {
+        return { x, y: r1 + r2 - load * x };
+      }
+
+      // use approaching left span formula
+      if (x === beam.primarySpan && isPrimarySpan) {
+        return { x, y: r1 - load * beam.primarySpan };
+      }
+
+      // use approaching right span formula
+      if (x === beam.primarySpan && !isPrimarySpan) {
+        return { x, y: r1 + r2 - load * beam.primarySpan };
+      }
+
+      throw new Error(`Invalid condition on x: ${JSON.stringify(x)}`);
     };
+  }
+
+  /**
+   *
+   * @param {Beam} beam
+   * @param {Number} load
+   * @returns {Number}
+   */
+  getM1(beam, load) {
+    // formula: M1 = -1 * ((w * L2^3) + (w * L1^3) / (8 * (L1 + L2)))
+    // L1 + L2 = total length
+
+    const primaryLengthCubed = Math.pow(beam.primarySpan, 3);
+    const secondaryLengthCubed = Math.pow(beam.secondarySpan, 3);
+    const totalLength = beam.primarySpan + beam.secondarySpan;
+
+    return -(
+      (load * secondaryLengthCubed + load * primaryLengthCubed) /
+      (8 * totalLength)
+    );
+  }
+
+  /**
+   *
+   * @param {Beam} beam beam object
+   * @param {Number} load
+   * @param {Number} m1 M1 value
+   * @returns {Number}
+   */
+  getR1(beam, load, m1) {
+    // R1 and R3 basically same formula, just different length point, which just replace L1 with L2
+
+    return m1 / beam.primarySpan + (load * beam.primarySpan) / 2;
+  }
+
+  /**
+   *
+   * @param {Beam} beam beam object
+   * @param {Number} load
+   * @param {Number} m1 M1 value
+   * @returns {Number}
+   */
+  getR3(beam, load, m1) {
+    // R1 and R3 basically same formula, just different length point, which just replace L1 with L2
+
+    return m1 / beam.secondarySpan + (load * beam.secondarySpan) / 2;
+  }
+
+  /**
+   *
+   * @param {Beam} beam beam object
+   * @param {Number} load
+   * @param {Number} r1 R1 value
+   * @param {Numebr} r3 R3 value
+   * @returns {Number}
+   */
+  getR2(beam, load, r1, r3) {
+    // R2 formula: R2 = w * L1 + w * L2 - R1 - R3
+
+    return load * beam.primarySpan + load * beam.secondarySpan - r1 - r3;
   }
 };
