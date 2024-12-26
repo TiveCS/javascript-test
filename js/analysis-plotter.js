@@ -173,8 +173,6 @@ class AnalysisPlotter {
       });
     }
 
-    console.log(xValues);
-
     return xValues;
   }
 
@@ -202,10 +200,6 @@ class AnalysisPlotter {
       const result = isSimplyCondition
         ? equation(x.value)
         : equation(x.value, x.isPrimarySpan);
-
-      // if (this.container.id === 'deflection_plot') {
-      //   console.log(result);
-      // }
 
       return result;
     });

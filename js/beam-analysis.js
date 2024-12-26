@@ -368,14 +368,6 @@ BeamAnalysis.analyzer.twoSpanUnequal = class {
         const result =
           (((p1 + p2 - p3 - p4) * 1) / (EI / hundredCubed)) * 1000 * j2;
 
-        console.log({
-          p1,
-          p2,
-          p3,
-          p4,
-          result,
-        });
-
         return {
           x,
           y: result,
